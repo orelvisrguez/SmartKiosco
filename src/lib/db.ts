@@ -136,11 +136,12 @@ CREATE TABLE IF NOT EXISTS cash_registers (
   closed_at TIMESTAMP WITH TIME ZONE
 );
 
--- Business settings table
+-- Business settings table (category-based JSONB storage)
 CREATE TABLE IF NOT EXISTS settings (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  key VARCHAR(100) UNIQUE NOT NULL,
-  value TEXT,
+  id SERIAL PRIMARY KEY,
+  category VARCHAR(50) NOT NULL UNIQUE,
+  data JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

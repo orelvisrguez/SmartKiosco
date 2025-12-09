@@ -91,3 +91,89 @@ export async function getCategoryProductCount(id: string): Promise<number> {
     return 0;
   }
 }
+
+// ==================== EXTENDED STATISTICS ====================
+
+export interface CategoryWithStats extends DBCategory {
+  product_count: number;
+  total_sales: number;
+  total_revenue: number;
+  avg_product_price: number;
+  stock_value: number;
+  low_stock_count: number;
+}
+
+export async function fetchCategoriesWithStats(): Promise<CategoryWithStats[]> {
+  if (!sql) return [];
+
+  try {
+    const results = await sql`
+      SELECT
+        c.*,
+        COALESCE(p_stats.product_count, 0) as product_count,
+        COALESCE(s_stats.total_sales, 0) as total_sales,
+        COALESCE(s_stats.total_revenue, 0) as total_revenue,
+        COALESCE(p_stats.avg_price, 0) as avg_product_price,
+        COALESCE(p_stats.stock_value, 0) as stock_value,
+        COALESCE(p_stats.low_stock_count, 0) as low_stock_count
+      FROM categories c
+      LEFT JOIN (
+        SELECT
+          category_id,
+          COUNT(*) as product_count,
+          AVG(price) as avg_price,
+          SUM(stock * cost) as stock_value,
+          COUNT(*) FILTER (WHERE stock <= min_stock) as low_stock_count
+        FROM products
+        WHERE active = true
+        GROUP BY category_id
+      ) p_stats ON c.id = p_stats.category_id
+      LEFT JOIN (
+        SELECT
+          p.category_id,
+          COUNT(DISTINCT si.sale_id) as total_sales,
+          SUM(si.subtotal) as total_revenue
+        FROM sale_items si
+        JOIN products p ON p.id = si.product_id
+        GROUP BY p.category_id
+      ) s_stats ON c.id = s_stats.category_id
+      ORDER BY c.name
+    `;
+    return results as CategoryWithStats[];
+  } catch (error) {
+    console.error('Error fetching categories with stats:', error);
+    return [];
+  }
+}
+
+export interface CategorySummary {
+  totalCategories: number;
+  totalProducts: number;
+  totalRevenue: number;
+  avgProductsPerCategory: number;
+}
+
+export async function getCategoriesSummary(): Promise<CategorySummary> {
+  if (!sql) {
+    return { totalCategories: 0, totalProducts: 0, totalRevenue: 0, avgProductsPerCategory: 0 };
+  }
+
+  try {
+    const catCount = await sql`SELECT COUNT(*) as count FROM categories`;
+    const prodCount = await sql`SELECT COUNT(*) as count FROM products WHERE active = true`;
+    const revenue = await sql`
+      SELECT COALESCE(SUM(si.subtotal), 0) as total
+      FROM sale_items si
+    `;
+
+    const totalCategories = parseInt(catCount[0].count);
+    const totalProducts = parseInt(prodCount[0].count);
+    const totalRevenue = parseFloat(revenue[0].total);
+    const avgProductsPerCategory = totalCategories > 0 ? totalProducts / totalCategories : 0;
+
+    return { totalCategories, totalProducts, totalRevenue, avgProductsPerCategory };
+  } catch (error) {
+    console.error('Error getting categories summary:', error);
+    return { totalCategories: 0, totalProducts: 0, totalRevenue: 0, avgProductsPerCategory: 0 };
+  }
+}

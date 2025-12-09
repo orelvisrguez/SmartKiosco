@@ -1,5 +1,8 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { Login } from '@/pages/Login';
 import { Dashboard } from '@/pages/Dashboard';
 import { POS } from '@/pages/POS';
 import { Caja } from '@/pages/Caja';
@@ -16,8 +19,41 @@ import { Configuracion } from '@/pages/Configuracion';
 function App() {
   return (
     <BrowserRouter>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#262626',
+            color: '#fafafa',
+            border: '1px solid #404040',
+          },
+          success: {
+            iconTheme: {
+              primary: '#4ADE80',
+              secondary: '#0a0a0a',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#F87171',
+              secondary: '#0a0a0a',
+            },
+          },
+        }}
+      />
       <Routes>
-        <Route element={<MainLayout />}>
+        {/* Public Route */}
+        <Route path="/login" element={<Login />} />
+
+        {/* Protected Routes */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <MainLayout />
+            </ProtectedRoute>
+          }
+        >
           <Route path="/" element={<Dashboard />} />
           <Route path="/pos" element={<POS />} />
           <Route path="/caja" element={<Caja />} />
@@ -28,7 +64,15 @@ function App() {
           <Route path="/compras" element={<Compras />} />
           <Route path="/finanzas" element={<Finanzas />} />
           <Route path="/reportes" element={<Reportes />} />
-          <Route path="/usuarios" element={<Usuarios />} />
+          {/* Admin-only routes */}
+          <Route
+            path="/usuarios"
+            element={
+              <ProtectedRoute requiredRoles={['admin']}>
+                <Usuarios />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/configuracion" element={<Configuracion />} />
         </Route>
       </Routes>

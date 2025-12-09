@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users,
@@ -10,10 +10,18 @@ import {
   Shield,
   UserCheck,
   UserX,
+  RefreshCw,
 } from 'lucide-react';
-import { useAppStore, type User } from '@/stores/useAppStore';
 import { DataTable } from '@/components/ui/DataTable';
 import toast from 'react-hot-toast';
+import {
+  fetchUsers,
+  createUser,
+  updateUser,
+  deleteUser,
+  getUserStats,
+  type DBUser,
+} from '@/lib/api/users';
 
 const roles = [
   { id: 'admin', label: 'Administrador', color: '#F87171', description: 'Acceso total al sistema' },
@@ -22,17 +30,41 @@ const roles = [
 ];
 
 export function Usuarios() {
-  const { users, addUser, updateUser, deleteUser, currentUser } = useAppStore();
+  const [users, setUsers] = useState<DBUser[]>([]);
+  const [stats, setStats] = useState({ total: 0, admins: 0, managers: 0, cashiers: 0, active: 0 });
+  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editingUser, setEditingUser] = useState<DBUser | null>(null);
+  const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    role: 'cashier' as User['role'],
+    role: 'cashier' as DBUser['role'],
     password: '',
   });
 
-  const handleOpenModal = (user?: User) => {
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [usersData, statsData] = await Promise.all([
+        fetchUsers(),
+        getUserStats(),
+      ]);
+      setUsers(usersData);
+      setStats(statsData);
+    } catch (error) {
+      console.error('Error loading users:', error);
+      toast.error('Error al cargar usuarios');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleOpenModal = (user?: DBUser) => {
     if (user) {
       setEditingUser(user);
       setFormData({
@@ -48,55 +80,67 @@ export function Usuarios() {
     setShowModal(true);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!formData.name || !formData.email) {
       toast.error('Completa los campos requeridos');
       return;
     }
 
-    if (editingUser) {
-      updateUser(editingUser.id, {
-        name: formData.name,
-        email: formData.email,
-        role: formData.role,
-      });
-      toast.success('Usuario actualizado');
-    } else {
-      if (!formData.password) {
-        toast.error('La contraseña es requerida');
-        return;
+    setSaving(true);
+    try {
+      if (editingUser) {
+        await updateUser(editingUser.id, {
+          name: formData.name,
+          email: formData.email,
+          role: formData.role,
+        });
+        toast.success('Usuario actualizado');
+      } else {
+        if (!formData.password) {
+          toast.error('La contraseña es requerida');
+          setSaving(false);
+          return;
+        }
+        await createUser({
+          name: formData.name,
+          email: formData.email,
+          role: formData.role,
+          password: formData.password,
+        });
+        toast.success('Usuario creado');
       }
-      addUser({
-        id: Date.now().toString(),
-        name: formData.name,
-        email: formData.email,
-        role: formData.role,
-        active: true,
-      });
-      toast.success('Usuario creado');
+      setShowModal(false);
+      loadData();
+    } catch (error) {
+      console.error('Error saving user:', error);
+      toast.error('Error al guardar usuario');
+    } finally {
+      setSaving(false);
     }
-
-    setShowModal(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (id === currentUser?.id) {
-      toast.error('No puedes eliminar tu propio usuario');
-      return;
-    }
+  const handleDelete = async (id: string) => {
     if (confirm('¿Estás seguro de eliminar este usuario?')) {
-      deleteUser(id);
-      toast.success('Usuario eliminado');
+      try {
+        await deleteUser(id);
+        toast.success('Usuario eliminado');
+        loadData();
+      } catch (error) {
+        console.error('Error deleting user:', error);
+        toast.error('Error al eliminar usuario');
+      }
     }
   };
 
-  const handleToggleActive = (user: User) => {
-    if (user.id === currentUser?.id) {
-      toast.error('No puedes desactivar tu propio usuario');
-      return;
+  const handleToggleActive = async (user: DBUser) => {
+    try {
+      await updateUser(user.id, { active: !user.active });
+      toast.success(user.active ? 'Usuario desactivado' : 'Usuario activado');
+      loadData();
+    } catch (error) {
+      console.error('Error toggling user status:', error);
+      toast.error('Error al cambiar estado');
     }
-    updateUser(user.id, { active: !user.active });
-    toast.success(user.active ? 'Usuario desactivado' : 'Usuario activado');
   };
 
   const columns = [
@@ -104,7 +148,7 @@ export function Usuarios() {
       key: 'name',
       label: 'Usuario',
       sortable: true,
-      render: (user: User) => (
+      render: (user: DBUser) => (
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-neutral-950 font-bold">
             {user.name.charAt(0).toUpperCase()}
@@ -119,7 +163,7 @@ export function Usuarios() {
     {
       key: 'role',
       label: 'Rol',
-      render: (user: User) => {
+      render: (user: DBUser) => {
         const role = roles.find((r) => r.id === user.role);
         return (
           <span
@@ -137,7 +181,7 @@ export function Usuarios() {
     {
       key: 'active',
       label: 'Estado',
-      render: (user: User) => (
+      render: (user: DBUser) => (
         <button
           onClick={() => handleToggleActive(user)}
           className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-full transition-colors ${
@@ -163,7 +207,7 @@ export function Usuarios() {
     {
       key: 'actions',
       label: 'Acciones',
-      render: (user: User) => (
+      render: (user: DBUser) => (
         <div className="flex items-center gap-2">
           <button
             onClick={() => handleOpenModal(user)}
@@ -182,6 +226,14 @@ export function Usuarios() {
     },
   ];
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw className="w-8 h-8 text-primary-500 animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -193,7 +245,7 @@ export function Usuarios() {
         <div>
           <h1 className="text-3xl font-bold text-neutral-50">Usuarios</h1>
           <p className="text-neutral-300 mt-1">
-            Gestión de usuarios y permisos • {users.length} usuarios
+            Gestión de usuarios y permisos • {stats.total} usuarios
           </p>
         </div>
         <button
@@ -208,7 +260,7 @@ export function Usuarios() {
       {/* Role Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {roles.map((role) => {
-          const count = users.filter((u) => u.role === role.id).length;
+          const count = role.id === 'admin' ? stats.admins : role.id === 'manager' ? stats.managers : stats.cashiers;
           return (
             <motion.div
               key={role.id}
@@ -330,7 +382,7 @@ export function Usuarios() {
                       <button
                         key={role.id}
                         type="button"
-                        onClick={() => setFormData({ ...formData, role: role.id as User['role'] })}
+                        onClick={() => setFormData({ ...formData, role: role.id as DBUser['role'] })}
                         className={`p-3 rounded-lg border-2 transition-all text-center ${
                           formData.role === role.id
                             ? 'border-primary-500 bg-primary-500/10'
@@ -364,9 +416,10 @@ export function Usuarios() {
                   </button>
                   <button
                     onClick={handleSubmit}
-                    className="flex-1 py-3 bg-primary-500 text-neutral-950 font-semibold rounded-lg hover:bg-primary-700 transition-colors"
+                    disabled={saving}
+                    className="flex-1 py-3 bg-primary-500 text-neutral-950 font-semibold rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
                   >
-                    {editingUser ? 'Guardar' : 'Crear'}
+                    {saving ? 'Guardando...' : editingUser ? 'Guardar' : 'Crear'}
                   </button>
                 </div>
               </div>

@@ -14,28 +14,44 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Store
+  Store,
+  LogOut,
 } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/stores/useAppStore';
+import { useAuthStore } from '@/stores/useAuthStore';
+import toast from 'react-hot-toast';
 
 const menuItems = [
-  { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/pos', icon: ShoppingCart, label: 'Punto de Venta' },
-  { path: '/caja', icon: Wallet, label: 'Caja' },
-  { path: '/productos', icon: Package, label: 'Productos' },
-  { path: '/inventario', icon: Warehouse, label: 'Inventario' },
-  { path: '/categorias', icon: FolderTree, label: 'Categorías' },
-  { path: '/proveedores', icon: Truck, label: 'Proveedores' },
-  { path: '/compras', icon: ShoppingBag, label: 'Compras' },
-  { path: '/finanzas', icon: DollarSign, label: 'Finanzas' },
-  { path: '/reportes', icon: BarChart3, label: 'Reportes' },
-  { path: '/usuarios', icon: Users, label: 'Usuarios' },
-  { path: '/configuracion', icon: Settings, label: 'Configuración' },
+  { path: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'manager', 'cashier'] },
+  { path: '/pos', icon: ShoppingCart, label: 'Punto de Venta', roles: ['admin', 'manager', 'cashier'] },
+  { path: '/caja', icon: Wallet, label: 'Caja', roles: ['admin', 'manager', 'cashier'] },
+  { path: '/productos', icon: Package, label: 'Productos', roles: ['admin', 'manager'] },
+  { path: '/inventario', icon: Warehouse, label: 'Inventario', roles: ['admin', 'manager'] },
+  { path: '/categorias', icon: FolderTree, label: 'Categorias', roles: ['admin', 'manager'] },
+  { path: '/proveedores', icon: Truck, label: 'Proveedores', roles: ['admin', 'manager'] },
+  { path: '/compras', icon: ShoppingBag, label: 'Compras', roles: ['admin', 'manager'] },
+  { path: '/finanzas', icon: DollarSign, label: 'Finanzas', roles: ['admin', 'manager'] },
+  { path: '/reportes', icon: BarChart3, label: 'Reportes', roles: ['admin', 'manager'] },
+  { path: '/usuarios', icon: Users, label: 'Usuarios', roles: ['admin'] },
+  { path: '/configuracion', icon: Settings, label: 'Configuracion', roles: ['admin'] },
 ];
 
 export function Sidebar() {
-  const { sidebarCollapsed, toggleSidebar, currentUser } = useAppStore();
+  const { sidebarCollapsed, toggleSidebar } = useAppStore();
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    toast.success('Sesion cerrada');
+    navigate('/login');
+  };
+
+  // Filter menu items based on user role
+  const filteredMenuItems = menuItems.filter(
+    (item) => user && item.roles.includes(user.role)
+  );
 
   return (
     <motion.aside
@@ -60,7 +76,7 @@ export function Sidebar() {
               exit={{ opacity: 0, x: -10 }}
             >
               <h1 className="text-lg font-bold text-neutral-50">KioskPro</h1>
-              <p className="text-xs text-neutral-300">Sistema de Gestión</p>
+              <p className="text-xs text-neutral-300">Sistema de Gestion</p>
             </motion.div>
           )}
         </motion.div>
@@ -69,7 +85,7 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 py-4 overflow-y-auto scrollbar-thin">
         <ul className="space-y-1 px-3">
-          {menuItems.map((item) => (
+          {filteredMenuItems.map((item) => (
             <li key={item.path}>
               <NavLink
                 to={item.path}
@@ -111,7 +127,7 @@ export function Sidebar() {
       <div className="p-4 border-t border-neutral-700">
         <div className={`flex items-center gap-3 ${sidebarCollapsed ? 'justify-center' : ''}`}>
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-neutral-950 font-bold text-sm">
-            {currentUser?.name.charAt(0).toUpperCase()}
+            {user?.name.charAt(0).toUpperCase()}
           </div>
           {!sidebarCollapsed && (
             <motion.div
@@ -119,11 +135,31 @@ export function Sidebar() {
               animate={{ opacity: 1 }}
               className="flex-1 min-w-0"
             >
-              <p className="text-sm font-medium text-neutral-50 truncate">{currentUser?.name}</p>
-              <p className="text-xs text-neutral-300 capitalize">{currentUser?.role}</p>
+              <p className="text-sm font-medium text-neutral-50 truncate">{user?.name}</p>
+              <p className="text-xs text-neutral-300 capitalize">{user?.role}</p>
             </motion.div>
           )}
+          {!sidebarCollapsed && (
+            <motion.button
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              onClick={handleLogout}
+              className="p-2 text-neutral-400 hover:text-error hover:bg-neutral-800 rounded-lg transition-colors"
+              title="Cerrar sesion"
+            >
+              <LogOut className="w-5 h-5" />
+            </motion.button>
+          )}
         </div>
+        {sidebarCollapsed && (
+          <button
+            onClick={handleLogout}
+            className="mt-3 w-10 h-10 flex items-center justify-center text-neutral-400 hover:text-error hover:bg-neutral-800 rounded-lg transition-colors mx-auto"
+            title="Cerrar sesion"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
       {/* Toggle Button */}
